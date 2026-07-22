@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import PageWithSidebar from '@/components/dashboard/PageWithSidebar'
-import { Map, Plus, RefreshCw, AlertCircle, Wand2, Trash2, ChevronLeft, Play, CheckCircle, Users } from 'lucide-react'
+import { Map, Plus, RefreshCw, AlertCircle, Wand2, Trash2, ChevronLeft, Play, CheckCircle, Users, X } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -62,6 +62,10 @@ export default function RutasBuilderPage() {
   // Flota (conductores del cliente) para asignar a la ruta
   const [drivers, setDrivers] = useState([])
   const [assignDriverId, setAssignDriverId] = useState('')
+
+  // Input para agregar guías a una parada (agrupar), por id de parada
+  const [stopGuideInputs, setStopGuideInputs] = useState({})
+  const setStopGuideInput = (stopId, val) => setStopGuideInputs((m) => ({ ...m, [stopId]: val }))
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -159,6 +163,39 @@ export default function RutasBuilderPage() {
     try {
       const headers = await authHeaders()
       await fetch(`${API}/routes/${detail.route.id}/items/${itemId}`, { method: 'DELETE', headers })
+      await openRoute(detail.route.id)
+    } catch (e) { setMsg({ type: 'err', text: e.message }) } finally { setBusy(false) }
+  }
+
+  // Agrupar: agrega una guía a una parada existente (route_item_guides)
+  const addGuideToStop = async (stopId) => {
+    const code = (stopGuideInputs[stopId] || '').trim()
+    if (!code) return
+    setBusy(true); setMsg(null)
+    try {
+      const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+      const res = await fetch(`${API}/route-stops/${stopId}/guides`, {
+        method: 'POST', headers, body: JSON.stringify({ guide_code: code }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        const map = {
+          OWNERSHIP_MISMATCH: 'Esa guía es de otro cliente.',
+          GUIDE_ALREADY_IN_STOP: 'Esa guía ya está en esta parada.',
+          GUIDE_ALREADY_ROUTED: 'Esa guía ya está en otra ruta activa.',
+        }
+        throw new Error(map[body.error] || body.error || 'No se pudo agregar la guía')
+      }
+      setStopGuideInput(stopId, '')
+      await openRoute(detail.route.id)
+    } catch (e) { setMsg({ type: 'err', text: e.message }) } finally { setBusy(false) }
+  }
+
+  const removeStopGuide = async (stopId, guideLinkId) => {
+    setBusy(true); setMsg(null)
+    try {
+      const headers = await authHeaders()
+      await fetch(`${API}/route-stops/${stopId}/guides/${guideLinkId}`, { method: 'DELETE', headers })
       await openRoute(detail.route.id)
     } catch (e) { setMsg({ type: 'err', text: e.message }) } finally { setBusy(false) }
   }
@@ -287,27 +324,65 @@ export default function RutasBuilderPage() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {detail.stops.map((s, i) => (
-                  <li key={s.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex-shrink-0">
-                      {s.stop_order || i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-mono font-semibold text-gray-900 truncate">{s.tracking_code || s.order_id || s.transport_order_id}</div>
-                      {(s.recipient || s.address) && (
-                        <div className="text-xs text-gray-700 truncate">
-                          {s.recipient ? `${s.recipient} · ` : ''}{s.address || ''}
+                  <li key={s.id} className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex-shrink-0">
+                        {s.stop_order || i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-mono font-semibold text-gray-900 truncate">{s.tracking_code || s.order_id || s.transport_order_id}</div>
+                        {(s.recipient || s.address) && (
+                          <div className="text-xs text-gray-700 truncate">
+                            {s.recipient ? `${s.recipient} · ` : ''}{s.address || ''}
+                          </div>
+                        )}
+                        <div className="text-[11px] text-gray-400">
+                          {s.item_type}{s.distance_km != null ? ` · ${s.distance_km} km` : ''}{s.lat == null ? ' · sin coords' : ''}
+                          {s.bultos_total != null ? ` · ${s.bultos_total} bultos` : ''}
                         </div>
-                      )}
-                      <div className="text-[11px] text-gray-400">
-                        {s.item_type}{s.distance_km != null ? ` · ${s.distance_km} km` : ''}{s.lat == null ? ' · sin coords' : ''}
                       </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${s.stop_status === 'completada' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {s.stop_status}
+                      </span>
+                      <button onClick={() => removeStop(s.id)} disabled={busy} className="text-red-500 hover:text-red-700 disabled:opacity-50" aria-label="Quitar parada">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${s.stop_status === 'completada' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {s.stop_status}
-                    </span>
-                    <button onClick={() => removeStop(s.id)} disabled={busy} className="text-red-500 hover:text-red-700 disabled:opacity-50" aria-label="Quitar">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    {/* Guías agrupadas en la parada, con sus bultos */}
+                    {s.guides && s.guides.length > 1 && (
+                      <ul className="mt-2 ml-10 space-y-1">
+                        {s.guides.map((g) => (
+                          <li key={g.order_id} className="flex items-center gap-2 text-xs text-gray-600">
+                            <span className="font-mono truncate">{g.tracking_code || g.order_id}</span>
+                            {g.recipient && <span className="truncate text-gray-400">· {g.recipient}</span>}
+                            <span className="ml-auto rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 whitespace-nowrap">{g.bultos_total} bultos</span>
+                            {g.guide_link_id && (
+                              <button onClick={() => removeStopGuide(s.id, g.guide_link_id)} disabled={busy} className="text-red-400 hover:text-red-600 disabled:opacity-50" aria-label="Quitar guía">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Agregar guía a esta parada (agrupar) */}
+                    <div className="mt-2 ml-10 flex gap-2">
+                      <input
+                        value={stopGuideInputs[s.id] || ''}
+                        onChange={(e) => setStopGuideInput(s.id, e.target.value)}
+                        placeholder="Agregar guía a esta parada (tracking)"
+                        className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        onClick={() => addGuideToStop(s.id)}
+                        disabled={busy || !(stopGuideInputs[s.id] || '').trim()}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-white bg-gray-900 hover:bg-black disabled:bg-gray-300"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Agregar
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
