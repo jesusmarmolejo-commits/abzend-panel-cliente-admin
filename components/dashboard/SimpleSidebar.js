@@ -14,12 +14,13 @@ import {
   Car,
   CreditCard,
   Upload,
+  Package,
 } from 'lucide-react'
 
-// Panel de ADMINISTRACIÓN del cliente (suscripción / flota / rutas).
-// Los servicios (paquetería, transporte, marítimo, aéreo) viven en el otro panel.
+// Panel de ADMINISTRACIÓN del cliente (suscripción / flota / rutas / guías).
 const NAV_ITEMS = [
   { href: '/dashboard', icon: Home, label: 'Inicio' },
+  { href: '/dashboard/guias', icon: Package, label: 'Guías' },
   { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
   { href: '/dashboard/vehiculos', icon: Car, label: 'Mis vehículos' },
   { href: '/dashboard/rutas', icon: Map, label: 'Rutas' },
@@ -29,9 +30,9 @@ const NAV_ITEMS = [
 // Bottom nav items (los más usados en móvil)
 const BOTTOM_NAV = [
   { href: '/dashboard', icon: Home, label: 'Inicio' },
+  { href: '/dashboard/guias', icon: Package, label: 'Guías' },
   { href: '/dashboard/vehiculos', icon: Car, label: 'Vehículos' },
   { href: '/dashboard/rutas', icon: Map, label: 'Rutas' },
-  { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Plan' },
 ]
 
 export default function SimpleSidebar() {

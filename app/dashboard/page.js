@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { Car, Map, Upload, CreditCard, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react'
+import { Car, Map, Upload, CreditCard, ArrowRight, RefreshCw, AlertCircle, Package } from 'lucide-react'
 import PageWithSidebar from '@/components/dashboard/PageWithSidebar'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -42,6 +42,7 @@ export default function AdminHomePage() {
   useEffect(() => { load() }, [])
 
   const tiles = [
+    { href: '/dashboard/guias', icon: Package, label: 'Guías', desc: 'Crea y rastrea tus envíos' },
     { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción', desc: 'Tu plan y tope de vehículos' },
     { href: '/dashboard/vehiculos', icon: Car, label: 'Mis vehículos', desc: 'Alta y baja de placas' },
     { href: '/dashboard/rutas', icon: Map, label: 'Rutas', desc: 'Crea y optimiza rutas' },
