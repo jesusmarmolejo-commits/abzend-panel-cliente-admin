@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import PageWithSidebar from '@/components/dashboard/PageWithSidebar'
-import { Map, Plus, RefreshCw, AlertCircle, Wand2, Trash2, ChevronLeft, Play, CheckCircle } from 'lucide-react'
+import { Map, Plus, RefreshCw, AlertCircle, Wand2, Trash2, ChevronLeft, Play, CheckCircle, Users } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -58,19 +59,26 @@ export default function RutasBuilderPage() {
   const [guideCode, setGuideCode] = useState('')
   const [busy, setBusy] = useState(false)
 
+  // Flota (conductores del cliente) para asignar a la ruta
+  const [drivers, setDrivers] = useState([])
+  const [assignDriverId, setAssignDriverId] = useState('')
+
   const load = async () => {
     setLoading(true); setError(null)
     try {
       const headers = await authHeaders()
-      const [rRes, vRes] = await Promise.all([
+      const [rRes, vRes, dRes] = await Promise.all([
         fetch(`${API}/routes`, { headers }),
         fetch(`${API}/vehicles`, { headers }),
+        fetch(`${API}/client/drivers`, { headers }),
       ])
       const rBody = await rRes.json(); const vBody = await vRes.json()
       if (!rRes.ok) throw new Error(rBody.error || 'Error al cargar rutas')
       if (!vRes.ok) throw new Error(vBody.error || 'Error al cargar vehículos')
       setRoutes(rBody.routes || [])
       setVehicles(vBody.vehicles || [])
+      // Los conductores no son críticos para la lista de rutas: no rompas si fallan.
+      try { const dBody = await dRes.json(); if (dRes.ok) setDrivers(dBody.drivers || []) } catch { /* noop */ }
     } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
 
@@ -104,7 +112,26 @@ export default function RutasBuilderPage() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Error al abrir la ruta')
       setDetail(body)
+      setAssignDriverId(body.route?.driver_id || '')
     } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  const assignDriver = async () => {
+    if (!detail) return
+    setBusy(true); setMsg(null)
+    try {
+      const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+      const res = await fetch(`${API}/routes/${detail.route.id}/driver`, {
+        method: 'PATCH', headers, body: JSON.stringify({ driver_id: assignDriverId || null }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        const map = { REPARTIDOR_CON_RUTA_ACTIVA: 'Ese repartidor ya tiene otra ruta activa.' }
+        throw new Error(map[body.error] || body.error || 'No se pudo asignar el repartidor')
+      }
+      setMsg({ type: 'ok', text: assignDriverId ? 'Repartidor asignado' : 'Repartidor desasignado' })
+      await openRoute(detail.route.id); await load()
+    } catch (e) { setMsg({ type: 'err', text: e.message }) } finally { setBusy(false) }
   }
 
   const addStop = async (e) => {
@@ -196,6 +223,36 @@ export default function RutasBuilderPage() {
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50">
                 <CheckCircle className="w-4 h-4" /> Completar
               </button>
+            )}
+          </div>
+
+          {/* Asignar repartidor de la flota */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-4 h-4 text-indigo-600" />
+              <span className="text-sm font-semibold text-gray-900">Repartidor</span>
+            </div>
+            {drivers.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                No tienes conductores en tu flota. Agrégalos en{' '}
+                <Link href="/dashboard/conductores" className="text-indigo-600 hover:underline">Conductores</Link>.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <select value={assignDriverId} onChange={(e) => setAssignDriverId(e.target.value)}
+                  className="min-w-[200px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Sin asignar</option>
+                  {drivers.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {(d.name || d.email || d.id)}{d.license_plate ? ` · ${d.license_plate}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={assignDriver} disabled={busy || assignDriverId === (r.driver_id || '')}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300">
+                  {assignDriverId ? 'Asignar' : 'Quitar'}
+                </button>
+              </div>
             )}
           </div>
 

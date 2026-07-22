@@ -16,6 +16,7 @@ import {
   Upload,
   Package,
   Archive,
+  Users,
 } from 'lucide-react'
 
 // Panel de ADMINISTRACIÓN del cliente (suscripción / flota / rutas / guías).
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/carga-masiva', icon: Archive, label: 'Carga masiva' },
   { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
   { href: '/dashboard/vehiculos', icon: Car, label: 'Mis vehículos' },
+  { href: '/dashboard/conductores', icon: Users, label: 'Conductores' },
   { href: '/dashboard/rutas', icon: Map, label: 'Rutas' },
   { href: '/dashboard/ubicaciones', icon: Upload, label: 'Ubicaciones' },
 ]
