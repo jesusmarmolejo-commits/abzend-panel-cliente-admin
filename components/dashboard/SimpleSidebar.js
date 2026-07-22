@@ -15,12 +15,14 @@ import {
   CreditCard,
   Upload,
   Package,
+  Archive,
 } from 'lucide-react'
 
 // Panel de ADMINISTRACIÓN del cliente (suscripción / flota / rutas / guías).
 const NAV_ITEMS = [
   { href: '/dashboard', icon: Home, label: 'Inicio' },
   { href: '/dashboard/guias', icon: Package, label: 'Guías' },
+  { href: '/dashboard/carga-masiva', icon: Archive, label: 'Carga masiva' },
   { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
   { href: '/dashboard/vehiculos', icon: Car, label: 'Mis vehículos' },
   { href: '/dashboard/rutas', icon: Map, label: 'Rutas' },
