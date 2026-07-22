@@ -4,6 +4,23 @@ import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
 import { MapPin, AlertCircle, X } from 'lucide-react';
 
+// Geocodifica una dirección con Nominatim. Devuelve { lat, lng } (numbers) o nulls.
+const geocodeOne = async (address) => {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+      address
+    )}&format=json&limit=1&countrycodes=mx&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+    return { lat: null, lng: null };
+  } catch {
+    return { lat: null, lng: null };
+  }
+};
+
 const AddressInput = ({ label, value, onChange, onSelect, placeholder }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -263,6 +280,31 @@ export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
         .substr(2, 8)
         .toUpperCase()}`;
 
+      // Fallback de geocodificación: si el usuario escribió la dirección sin
+      // elegir sugerencia ni marcar en el mapa, las coords vienen null. Se
+      // geocodifican aquí para que la optimización de rutas funcione. Un
+      // geocode fallido no bloquea la orden (se inserta con null).
+      let originLat = form.origin_lat;
+      let originLng = form.origin_lng;
+      let destLat = form.dest_lat;
+      let destLng = form.dest_lng;
+      let originCalled = false;
+
+      if (originLat == null || originLng == null) {
+        const r = await geocodeOne(form.origin_address);
+        originLat = r.lat;
+        originLng = r.lng;
+        originCalled = true;
+      }
+      if (destLat == null || destLng == null) {
+        if (originCalled) {
+          await new Promise((resolve) => setTimeout(resolve, 1100)); // rate-limit Nominatim
+        }
+        const r = await geocodeOne(form.dest_address);
+        destLat = r.lat;
+        destLng = r.lng;
+      }
+
       const { data, error: insertError } = await supabase
         .from('orders')
         .insert([
@@ -272,13 +314,13 @@ export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
             sender_name: form.sender_name,
             sender_phone: form.sender_phone,
             origin_address: form.origin_address,
-            origin_lat: form.origin_lat,
-            origin_lng: form.origin_lng,
+            origin_lat: originLat,
+            origin_lng: originLng,
             recipient_name: form.recipient_name,
             recipient_phone: form.recipient_phone,
             dest_address: form.dest_address,
-            dest_lat: form.dest_lat,
-            dest_lng: form.dest_lng,
+            dest_lat: destLat,
+            dest_lng: destLng,
             package_type: form.package_type,
             weight_kg: parseFloat(form.weight_kg) || 1,
             service: form.service,
