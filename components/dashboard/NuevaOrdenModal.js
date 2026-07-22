@@ -95,6 +95,15 @@ const AddressInput = ({ label, value, onChange, onSelect, placeholder }) => {
   );
 };
 
+const BULTO_TIPOS = [
+  ['paquete', 'Paquete'],
+  ['totem', 'Totem'],
+  ['pallet', 'Pallet'],
+  ['tarima', 'Tarima'],
+  ['sobre', 'Sobre'],
+  ['otro', 'Otro'],
+];
+
 export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
   const [form, setForm] = useState({
     sender_name: '',
@@ -119,6 +128,19 @@ export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
   const [mapLoaded, setMapLoaded] = useState(false);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+
+  // Bultos: la guia se compone de N items fisicos; el tipo de la guia se deriva.
+  const [bultos, setBultos] = useState([{ tipo: 'paquete', cantidad: 1, descripcion: '' }]);
+  const addBulto = () => setBultos((b) => [...b, { tipo: 'paquete', cantidad: 1, descripcion: '' }]);
+  const removeBulto = (i) => setBultos((b) => b.filter((_, idx) => idx !== i));
+  const updateBulto = (i, field, value) =>
+    setBultos((b) => b.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  const totalBultos = bultos.reduce((n, b) => n + (parseInt(b.cantidad, 10) || 0), 0);
+  const derivePackageType = (list) => {
+    if (list.length === 0) return 'general';
+    const firstTipo = list[0].tipo;
+    return list.every((b) => b.tipo === firstTipo) ? firstTipo : 'mixto';
+  };
 
   const prices = { standard: 95, express: 180, same_day: 280 };
   const subtotal = prices[form.service] || 95;
@@ -321,7 +343,7 @@ export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
             dest_address: form.dest_address,
             dest_lat: destLat,
             dest_lng: destLng,
-            package_type: form.package_type,
+            package_type: derivePackageType(bultos),
             weight_kg: parseFloat(form.weight_kg) || 1,
             service: form.service,
             instructions: form.instructions,
@@ -338,6 +360,25 @@ export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
       if (insertError) {
         setError(insertError.message);
         return;
+      }
+
+      // Insertar los bultos de la guia (client-side, RLS por orden). Un fallo
+      // aqui no revierte la orden ya creada.
+      const bultosToInsert = bultos
+        .filter((b) => b.tipo && parseInt(b.cantidad, 10) >= 1)
+        .map((b) => ({
+          order_id: data.id,
+          tipo: b.tipo,
+          cantidad: parseInt(b.cantidad, 10) || 1,
+          descripcion: (b.descripcion && b.descripcion.trim()) || null,
+        }));
+      if (bultosToInsert.length > 0) {
+        try {
+          const { error: bultosError } = await supabase.from('bultos').insert(bultosToInsert);
+          if (bultosError) console.warn('Error inserting bultos:', bultosError);
+        } catch (err) {
+          console.warn('Error inserting bultos:', err);
+        }
       }
 
       onSuccess(trackingCode, data);
@@ -462,31 +503,62 @@ export default function NuevaOrdenModal({ clientId, onClose, onSuccess }) {
 
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Paquete</h3>
-              <div className="grid grid-cols-2 gap-4">
+              {/* Bultos: la guía deriva su tipo de estos */}
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-                  <select
-                    value={form.package_type}
-                    onChange={(e) => setForm({ ...form, package_type: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                  >
-                    <option value="general">Paquetería general</option>
-                    <option value="document">Documento / sobre</option>
-                    <option value="fragile">Frágil</option>
-                    <option value="perishable">Perecedero</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700">Bultos</label>
+                  <p className="text-xs text-gray-500">Tipo, cantidad y descripción por bulto</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Peso (kg)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="2.5"
-                    value={form.weight_kg}
-                    onChange={(e) => setForm({ ...form, weight_kg: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                  />
+                {bultos.map((bulto, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select
+                      value={bulto.tipo}
+                      onChange={(e) => updateBulto(i, 'tipo', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                    >
+                      {BULTO_TIPOS.map(([val, label]) => (
+                        <option key={val} value={val}>{label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      value={bulto.cantidad}
+                      onChange={(e) => updateBulto(i, 'cantidad', e.target.value)}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Descripción (opcional)"
+                      value={bulto.descripcion}
+                      onChange={(e) => updateBulto(i, 'descripcion', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                    />
+                    {bultos.length > 1 && (
+                      <button type="button" onClick={() => removeBulto(i)} className="p-1 text-gray-400 hover:text-red-500">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center justify-between">
+                  <button type="button" onClick={addBulto} className="text-indigo-600 text-sm hover:text-indigo-800">
+                    + Agregar bulto
+                  </button>
+                  <span className="text-sm text-gray-600">Total de bultos: {totalBultos}</span>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Peso total (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="2.5"
+                  value={form.weight_kg}
+                  onChange={(e) => setForm({ ...form, weight_kg: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Servicio</label>

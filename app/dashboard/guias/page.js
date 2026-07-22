@@ -71,6 +71,7 @@ export default function PaqueteriaPage() {
   const [showNuevaOrden, setShowNuevaOrden] = useState(false);
   const [guiaOrder, setGuiaOrder] = useState(null);
   const [selectedGuide, setSelectedGuide] = useState(null);
+  const [createdTracking, setCreatedTracking] = useState(null);
 
   const loadData = async () => {
     const supabase = createClient();
@@ -96,7 +97,7 @@ export default function PaqueteriaPage() {
 
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('*, events:order_events(status,status_code,note,created_at), pod:proof_of_delivery(receiver_name,receiver_type,photo_1,photo_2,photo_3,photo_4,signature,lat,lng,created_at)')
+        .select('*, events:order_events(status,status_code,note,created_at), pod:proof_of_delivery(receiver_name,receiver_type,photo_1,photo_2,photo_3,photo_4,signature,lat,lng,created_at), bultos(id,tipo,cantidad,descripcion)')
         .eq('client_id', userData.id)
         .order('created_at', { ascending: false });
 
@@ -132,26 +133,12 @@ export default function PaqueteriaPage() {
     setOrders(ordersData || []);
   };
 
-  const handleOrderSuccess = (tracking_code, orderData) => {
+  // Al crear una guía nos quedamos en la lista (imprimir es opcional).
+  const handleOrderSuccess = (tracking_code) => {
     setShowNuevaOrden(false);
     refreshOrders();
-    const params = new URLSearchParams({
-      tracking: tracking_code,
-      remitente: orderData.sender_name || '',
-      remitente_tel: orderData.sender_phone || '',
-      origen: orderData.origin_address || '',
-      destinatario: orderData.recipient_name || '',
-      destinatario_tel: orderData.recipient_phone || '',
-      destino: orderData.dest_address || '',
-      tipo: orderData.package_type || '',
-      peso: orderData.weight_kg || '',
-      total: orderData.total || '',
-      servicio: orderData.service || '',
-      fecha: orderData.created_at || new Date().toISOString(),
-      seguro: '0',
-      instrucciones: orderData.instructions || ''
-    });
-    router.push('/guia?' + params.toString());
+    setCreatedTracking(tracking_code);
+    setTimeout(() => setCreatedTracking(null), 8000);
   };
 
   useEffect(() => {
@@ -394,6 +381,28 @@ export default function PaqueteriaPage() {
       <PageWithSidebar>
         <div className="min-h-screen bg-gray-50 p-8">
           <div className="max-w-7xl mx-auto">
+
+          {createdTracking && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+              <span className="text-sm text-green-800">
+                ✓ Guía <span className="font-mono font-semibold">{createdTracking}</span> creada. Imprimirla es opcional.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const o = orders.find((x) => x.tracking_code === createdTracking);
+                    if (o) setGuiaOrder(o);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  <Printer size={16} /> Imprimir guía
+                </button>
+                <button onClick={() => setCreatedTracking(null)} className="text-green-700 hover:text-green-900" aria-label="Cerrar">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
