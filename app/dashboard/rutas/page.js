@@ -21,6 +21,25 @@ async function authHeaders() {
   return { Authorization: `Bearer ${session?.access_token}` }
 }
 
+// CSV de ejemplo (mismo formato que Carga masiva) descargable desde el builder.
+const SAMPLE_CSV = `sender_name,sender_phone,origin_street,origin_cp,origin_municipio,origin_estado,recipient_name,recipient_phone,dest_street,dest_cp,dest_municipio,dest_estado,package_type,weight_kg,service,instructions,references,has_insurance
+ABZEND Almacen,5555550100,Av Central 100,09030,Iztapalapa,Ciudad de Mexico,Maria Garcia,5551110001,Av Paseo de la Reforma 222,06600,Cuauhtemoc,Ciudad de Mexico,paquete,2.5,standard,Entregar en recepcion,Torre corporativa,false
+ABZEND Almacen,5555550100,Av Central 100,09030,Iztapalapa,Ciudad de Mexico,Juan Perez,5551110002,Av Insurgentes Sur 1602,03940,Benito Juarez,Ciudad de Mexico,paquete,1.2,express,Horario oficina,Planta baja,false
+ABZEND Almacen,5555550100,Av Central 100,09030,Iztapalapa,Ciudad de Mexico,Luis Hernandez,5551110003,Calzada de Tlalpan 3000,04650,Coyoacan,Ciudad de Mexico,paquete,3.0,standard,Preguntar por almacen,Junto a farmacia,true
+ABZEND Almacen,5555550100,Av Central 100,09030,Iztapalapa,Ciudad de Mexico,Ana Lopez,5551110004,Av Universidad 1000,04510,Coyoacan,Ciudad de Mexico,paquete,0.8,standard,Dejar con vigilancia,Edificio azul,false
+ABZEND Almacen,5555550100,Av Central 100,09030,Iztapalapa,Ciudad de Mexico,Carlos Ruiz,5551110005,Blvd Manuel Avila Camacho 2000,53950,Naucalpan,Estado de Mexico,paquete,5.0,standard,Llamar antes de llegar,Zona industrial,false
+`
+
+function downloadSampleCSV() {
+  const blob = new Blob(['﻿' + SAMPLE_CSV], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'guias_muestra_ruta.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function RutasBuilderPage() {
   const [routes, setRoutes] = useState([])
   const [vehicles, setVehicles] = useState([])
@@ -200,7 +219,14 @@ export default function RutasBuilderPage() {
           {/* Lista de paradas ordenadas */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             {detail.stops.length === 0 ? (
-              <div className="p-6 text-center text-gray-400 text-sm">Sin paradas. Agrega guías o carga un CSV de ubicaciones.</div>
+              <div className="p-6 text-center text-gray-400 text-sm">
+                Sin paradas. Agrega guías o carga un CSV de ubicaciones.
+                <div className="mt-2">
+                  <button onClick={downloadSampleCSV} className="text-indigo-600 hover:underline text-xs font-medium">
+                    ⬇ Descargar CSV de ejemplo
+                  </button>
+                </div>
+              </div>
             ) : (
               <ul className="divide-y divide-gray-100">
                 {detail.stops.map((s, i) => (
