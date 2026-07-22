@@ -31,8 +31,11 @@ const geocodeAddress = async (address) => {
 
   let result = { lat: null, lng: null };
   try {
+    // Nominatim no resuelve el literal "CP" (p. ej. "CP 06600"); se quita para
+    // la búsqueda dejando solo el número de código postal, que sí desambigua.
+    const query = address.replace(/\bCP\s*/gi, '');
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-      address
+      query
     )}&format=json&limit=1&countrycodes=mx`;
     const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
     const data = await res.json();
