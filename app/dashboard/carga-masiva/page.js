@@ -16,6 +16,36 @@ import PageWithSidebar from '@/components/dashboard/PageWithSidebar';
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Cache de geocodificación por dirección (persiste entre renders/cargas de la sesión)
+const geocodeCache = new Map();
+
+// Geocodifica una dirección con Nominatim. Devuelve { lat, lng } (numbers) o nulls.
+// El rate-limit (~1 req/seg) se aplica solo después de una llamada real de red, no en cache hits.
+const geocodeAddress = async (address) => {
+  if (!address) return { lat: null, lng: null };
+  if (geocodeCache.has(address)) return geocodeCache.get(address);
+
+  let result = { lat: null, lng: null };
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+      address
+    )}&format=json&limit=1&countrycodes=mx`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+  } catch {
+    result = { lat: null, lng: null };
+  }
+
+  geocodeCache.set(address, result);
+  await sleep(1100); // respeta el límite de Nominatim (~1 req/seg) tras una llamada real
+  return result;
+};
+
 export default function CargaMasivaPage() {
   const router = useRouter();
   const [file, setFile] = useState(null);
@@ -132,15 +162,24 @@ export default function CargaMasivaPage() {
           .filter(Boolean)
           .join(' | ');
 
+        // Geocodifica origen y destino (con cache + rate-limit) para que la
+        // optimización de rutas por cercanía pueda ordenar las paradas.
+        const originCoords = await geocodeAddress(originAddress);
+        const destCoords = await geocodeAddress(destAddress);
+
         const orderData = {
           tracking_code: trackingCode,
           client_id: clientId,
           sender_name: row.sender_name,
           sender_phone: row.sender_phone,
           origin_address: originAddress,
+          origin_lat: originCoords.lat,
+          origin_lng: originCoords.lng,
           recipient_name: row.recipient_name,
           recipient_phone: row.recipient_phone,
           dest_address: destAddress,
+          dest_lat: destCoords.lat,
+          dest_lng: destCoords.lng,
           package_type: row.package_type,
           weight_kg: parseFloat(row.weight_kg) || 0,
           service: row.service,
@@ -166,6 +205,7 @@ export default function CargaMasivaPage() {
           success: !insertError,
           error: insertError?.message || null,
           id: data?.id || null,
+          geocoded: destCoords.lat !== null && destCoords.lng !== null,
         });
       }
 
