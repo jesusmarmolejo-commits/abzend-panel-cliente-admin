@@ -209,8 +209,13 @@ export default function RutasBuilderPage() {
                       {s.stop_order || i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-900 font-mono truncate">{s.order_id || s.transport_order_id}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-sm font-mono font-semibold text-gray-900 truncate">{s.tracking_code || s.order_id || s.transport_order_id}</div>
+                      {(s.recipient || s.address) && (
+                        <div className="text-xs text-gray-700 truncate">
+                          {s.recipient ? `${s.recipient} · ` : ''}{s.address || ''}
+                        </div>
+                      )}
+                      <div className="text-[11px] text-gray-400">
                         {s.item_type}{s.distance_km != null ? ` · ${s.distance_km} km` : ''}{s.lat == null ? ' · sin coords' : ''}
                       </div>
                     </div>
