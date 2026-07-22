@@ -18,8 +18,10 @@ const API = process.env.NEXT_PUBLIC_API_URL;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Cache de geocodificación por dirección (persiste entre renders/cargas de la sesión)
-const geocodeCache = new Map();
+// Cache de geocodificación por dirección (persiste entre renders/cargas de la sesión).
+// Nota: este módulo importa `Map` (ícono) de lucide-react, así que hay que usar
+// `globalThis.Map` explícitamente para el constructor nativo y evitar el shadowing.
+const geocodeCache = new globalThis.Map();
 
 // Geocodifica una dirección con Nominatim. Devuelve { lat, lng } (numbers) o nulls.
 // El rate-limit (~1 req/seg) se aplica solo después de una llamada real de red, no en cache hits.
