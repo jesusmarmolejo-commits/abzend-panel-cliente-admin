@@ -22,6 +22,18 @@ async function authHeaders() {
   return { Authorization: `Bearer ${session?.access_token}` }
 }
 
+// fetch con timeout para que una petición colgada (cold start de Render) no
+// deje el skeleton de carga para siempre.
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 12000) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal })
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 // CSV de ejemplo (mismo formato que Carga masiva) descargable desde el builder.
 const SAMPLE_CSV = `sender_name,sender_phone,origin_street,origin_cp,origin_municipio,origin_estado,recipient_name,recipient_phone,dest_street,dest_cp,dest_municipio,dest_estado,package_type,weight_kg,service,instructions,references,has_insurance
 ABZEND Almacen,5555550100,Av Central 100,09030,Iztapalapa,Ciudad de Mexico,Maria Garcia,5551110001,Av Paseo de la Reforma 222,06600,Cuauhtemoc,Ciudad de Mexico,paquete,2.5,standard,Entregar en recepcion,Torre corporativa,false
@@ -67,14 +79,14 @@ export default function RutasBuilderPage() {
   const [stopGuideInputs, setStopGuideInputs] = useState({})
   const setStopGuideInput = (stopId, val) => setStopGuideInputs((m) => ({ ...m, [stopId]: val }))
 
-  const load = async () => {
-    setLoading(true); setError(null)
+  const load = async (attempt = 0) => {
+    if (attempt === 0) { setLoading(true); setError(null) }
     try {
       const headers = await authHeaders()
       const [rRes, vRes, dRes] = await Promise.all([
-        fetch(`${API}/routes`, { headers }),
-        fetch(`${API}/vehicles`, { headers }),
-        fetch(`${API}/client/drivers`, { headers }),
+        fetchWithTimeout(`${API}/routes`, { headers }),
+        fetchWithTimeout(`${API}/vehicles`, { headers }),
+        fetchWithTimeout(`${API}/client/drivers`, { headers }),
       ])
       const rBody = await rRes.json(); const vBody = await vRes.json()
       if (!rRes.ok) throw new Error(rBody.error || 'Error al cargar rutas')
@@ -83,7 +95,13 @@ export default function RutasBuilderPage() {
       setVehicles(vBody.vehicles || [])
       // Los conductores no son críticos para la lista de rutas: no rompas si fallan.
       try { const dBody = await dRes.json(); if (dRes.ok) setDrivers(dBody.drivers || []) } catch { /* noop */ }
-    } catch (e) { setError(e.message) } finally { setLoading(false) }
+      setLoading(false)
+    } catch (e) {
+      // Reintenta ante fallo/timeout transitorio (p. ej. cold start), sin apagar el skeleton.
+      if (attempt < 2) { setTimeout(() => load(attempt + 1), 1200); return }
+      setError(e.name === 'AbortError' ? 'El servidor tardó en responder. Toca Recargar.' : e.message)
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -402,7 +420,7 @@ export default function RutasBuilderPage() {
             <Map className="w-6 h-6 text-indigo-600" /> Rutas
           </h1>
           <div className="flex gap-2">
-            <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100" aria-label="Recargar">
+            <button onClick={() => load()} className="p-2 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100" aria-label="Recargar">
               <RefreshCw className="w-5 h-5" />
             </button>
             <button onClick={() => setShowNew(!showNew)}

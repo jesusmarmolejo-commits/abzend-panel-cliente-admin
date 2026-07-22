@@ -7,6 +7,18 @@ import { Users, UserPlus, RefreshCw, AlertCircle, User, Power, KeyRound } from '
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
+// fetch con timeout para que una petición colgada (cold start de Render) no
+// deje el skeleton de carga para siempre.
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 12000) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal })
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 const STATUS_LABEL = { online: 'En línea', offline: 'Desconectado', busy: 'Ocupado' }
 
 const EMPTY_FORM = { email: '', full_name: '', phone: '', license_plate: '', password: '' }
@@ -27,18 +39,18 @@ export default function ConductoresPage() {
     return { Authorization: `Bearer ${session?.access_token}` }
   }
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
+  const load = async (attempt = 0) => {
+    if (attempt === 0) { setLoading(true); setError(null) }
     try {
       const headers = await authHeaders()
-      const res = await fetch(`${API}/client/drivers`, { headers })
+      const res = await fetchWithTimeout(`${API}/client/drivers`, { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Error al cargar conductores')
       setDrivers(body.drivers || [])
+      setLoading(false)
     } catch (e) {
-      setError(e.message)
-    } finally {
+      if (attempt < 2) { setTimeout(() => load(attempt + 1), 1200); return }
+      setError(e.name === 'AbortError' ? 'El servidor tardó en responder. Toca Recargar.' : e.message)
       setLoading(false)
     }
   }
@@ -131,7 +143,7 @@ export default function ConductoresPage() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Users className="w-6 h-6 text-indigo-600" /> Conductores
           </h1>
-          <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100" aria-label="Recargar">
+          <button onClick={() => load()} className="p-2 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100" aria-label="Recargar">
             <RefreshCw className="w-5 h-5" />
           </button>
         </div>
