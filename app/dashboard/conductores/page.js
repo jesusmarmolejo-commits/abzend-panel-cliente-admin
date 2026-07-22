@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import PageWithSidebar from '@/components/dashboard/PageWithSidebar'
-import { Users, Plus, RefreshCw, AlertCircle, User } from 'lucide-react'
+import { Users, UserPlus, RefreshCw, AlertCircle, User } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -14,12 +14,14 @@ const STATUS_COLOR = {
   busy: 'bg-amber-100 text-amber-700',
 }
 
+const EMPTY_FORM = { email: '', full_name: '', phone: '', license_plate: '', password: '' }
+
 export default function ConductoresPage() {
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [email, setEmail] = useState('')
-  const [linking, setLinking] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [creating, setCreating] = useState(false)
   const [msg, setMsg] = useState(null)
 
   const authHeaders = async () => {
@@ -46,28 +48,35 @@ export default function ConductoresPage() {
 
   useEffect(() => { load() }, [])
 
-  const linkDriver = async (e) => {
+  const setField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const createDriver = async (e) => {
     e.preventDefault()
-    const mail = email.trim()
-    if (!mail) return
-    setLinking(true)
+    if (!form.email.trim() || !form.full_name.trim() || !form.password) return
+    setCreating(true)
     setMsg(null)
     try {
       const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-      const res = await fetch(`${API}/client/drivers/link`, {
+      const res = await fetch(`${API}/client/drivers`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ email: mail }),
+        body: JSON.stringify({
+          email: form.email.trim(),
+          password: form.password,
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim() || null,
+          license_plate: form.license_plate.trim() || null,
+        }),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.error || 'No se pudo ligar el repartidor')
-      setEmail('')
-      setMsg({ type: 'ok', text: body.already ? 'Ese repartidor ya estaba en tu flota' : `Repartidor ${body.driver?.name || mail} agregado a tu flota` })
+      if (!res.ok) throw new Error(body.error || 'No se pudo crear el repartidor')
+      setForm(EMPTY_FORM)
+      setMsg({ type: 'ok', text: `Repartidor ${body.driver?.name || form.full_name} creado y agregado a tu flota` })
       await load()
     } catch (e2) {
       setMsg({ type: 'err', text: e2.message })
     } finally {
-      setLinking(false)
+      setCreating(false)
     }
   }
 
@@ -87,26 +96,57 @@ export default function ConductoresPage() {
           </button>
         </div>
         <p className="text-gray-500 text-sm mb-6">
-          Repartidores de tu flota. Agrégalos por correo (deben tener ya una cuenta de repartidor) y asígnalos a tus rutas.
+          Repartidores de tu flota. Crea sus cuentas aquí y asígnalos a tus rutas.
         </p>
 
-        {/* Alta por email */}
-        <form onSubmit={linkDriver} className="flex gap-2 mb-3">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Correo del repartidor"
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            disabled={linking}
-          />
-          <button
-            type="submit"
-            disabled={linking || !email.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            <Plus className="w-4 h-4" /> Agregar a mi flota
-          </button>
+        {/* Crear repartidor */}
+        <form onSubmit={createDriver} className="bg-white border border-gray-200 rounded-xl p-4 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <UserPlus className="w-4 h-4 text-indigo-600" />
+            <span className="text-sm font-semibold text-gray-900">Crear repartidor</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              value={form.full_name} onChange={setField('full_name')}
+              placeholder="Nombre completo *"
+              className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={creating}
+            />
+            <input
+              type="email" value={form.email} onChange={setField('email')}
+              placeholder="Correo *"
+              className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={creating}
+            />
+            <input
+              type="tel" value={form.phone} onChange={setField('phone')}
+              placeholder="Teléfono"
+              className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={creating}
+            />
+            <input
+              value={form.license_plate} onChange={setField('license_plate')}
+              placeholder="Placa (opcional)"
+              className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={creating}
+            />
+            <input
+              type="password" value={form.password} onChange={setField('password')}
+              placeholder="Contraseña inicial *"
+              className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:col-span-2"
+              disabled={creating}
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="flex justify-end mt-3">
+            <button
+              type="submit"
+              disabled={creating || !form.email.trim() || !form.full_name.trim() || !form.password}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              <UserPlus className="w-4 h-4" /> {creating ? 'Creando…' : 'Crear repartidor'}
+            </button>
+          </div>
         </form>
 
         {msg && (
